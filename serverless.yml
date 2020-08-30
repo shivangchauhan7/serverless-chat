@@ -1,0 +1,59 @@
+service: serverless-chat
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  websocketsApiName: custom-websockets-api-name
+  websocketsApiRouteSelectionExpression: $request.body.action
+  environment:
+    DYNAMO_TABLE_NAME: connections
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:DeleteItem
+        - dynamodb:UpdateItem
+        - lambda:InvokeFunction
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:
+      table/${self:provider.environment.DYNAMO_TABLE_NAME}"
+
+functions:
+  connectionHandler:
+    handler: src/connectionHandler/index.connectionHandler
+    events:
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+
+  sendMessage:
+    handler: src/sendMessage/index.sendMessage
+    events:
+      - websocket:
+          route: sendmessage
+
+  manageRoom:
+    handler: src/manageRoom/index.manageRoom
+    events:
+      - websocket:
+          route: manageroom
+
+resources:
+  Resources:
+    UsersDynamoDbTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: connectionId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connectionId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMO_TABLE_NAME}
